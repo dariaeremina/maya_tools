@@ -24,6 +24,7 @@ MAYA_WINDOW_POINTER = omui.MQtUtil.mainWindow()
 MAYA_MAIN_WINDOW = wrapInstance(long(MAYA_WINDOW_POINTER), QWidget)
 
 WIN_TITLE = "Keyframe Scaler"
+STEP_POWER = 1.2
 
 class MainWindow(QWidget):
     def __init__(self):
@@ -34,6 +35,7 @@ class MainWindow(QWidget):
         self.is_selection = True
         self.is_first = True
         self.is_vertical = True
+        self.speed = 1;
 
         grid = QGridLayout(self)
         grid.setAlignment(Qt.AlignTop)
@@ -41,12 +43,16 @@ class MainWindow(QWidget):
 
         # Check box determines whether the scaling is happening for only selected keyframes or
         # all keyframes in the timeline
-        check_box = QCheckBox("Scale selected only")
-        check_box.setChecked(True)
-        explanation_of_selection = QLabel("(If off will scale the while curve after or before"
+        scale_selected_check_box = QCheckBox("Scale selected only")
+        exponential_check_box = QCheckBox("Exponential Scale")
+        scale_selected_check_box.setChecked(True)
+        exponential_check_box.setChecked(True)
+
+        explanation_of_selection = QLabel("(If off will scale the whole curve after or before"
                                           " the first or the last selected keyframe)")
         explanation_of_selection.setWordWrap(True)
 
+        self.speed_button = QPushButton("Speed: 1")
         # Horizontal and Vertical buttons determine whether we scale time-wise or value-wise
         self.vertical_scale_button, self.horizontal_scale_button = self.add_toggle_buttons("V","H")
 
@@ -54,11 +60,13 @@ class MainWindow(QWidget):
         self.first_frame_button, self.last_frame_button = self.add_toggle_buttons("F","L")
 
         # Spin box determines how much are the keyframes getting scaled
-        self.spine_box = CustomSpinBox(value=1.0, parent=None, on_value_change = scale_frames.main,
-            is_first=self.first_frame_button.isChecked(),
-            are_selected_frames=self.is_selection,
-            is_vertical=self.is_vertical)
-        self.init_spin_box(self.spine_box)
+        self.spin_box = CustomSpinBox(value=1.0, parent=None, on_value_change = scale_frames.main,
+                                      is_first=self.first_frame_button.isChecked(),
+                                      are_selected_frames=self.is_selection,
+                                      is_vertical=self.is_vertical)
+        self.init_spin_box(self.spin_box)
+
+        self.speed_button.clicked.connect(self.on_speed_change)
 
         self.first_frame_button.clicked.connect(lambda: self.on_press_first())
         self.last_frame_button.clicked.connect(lambda: self.on_press_last())
@@ -66,30 +74,56 @@ class MainWindow(QWidget):
         self.vertical_scale_button.clicked.connect(lambda: self.on_press_vertical())
         self.horizontal_scale_button.clicked.connect(lambda: self.on_press_horizontal())
 
-        grid.addWidget(check_box, 0, 0, 1, 4)
+        grid.addWidget(scale_selected_check_box, 0, 0, 1, 4)
         grid.addWidget(explanation_of_selection, 1, 0, 1, 4)
-        grid.addWidget(self.vertical_scale_button, 2, 1, 1, 1)
-        grid.addWidget(self.horizontal_scale_button, 2, 2, 1, 1)
-        grid.addWidget(self.first_frame_button, 3, 0, 1, 1)
-        grid.addWidget(self.spine_box, 3, 1, 1, 2)
-        grid.addWidget(self.last_frame_button, 3, 3, 1, 1)
+        grid.addWidget(exponential_check_box, 2, 0, 1, 4)
+        grid.addWidget(self.speed_button, 3, 0, 1, 4)
+        grid.addWidget(self.vertical_scale_button, 4, 1, 1, 1)
+        grid.addWidget(self.horizontal_scale_button, 4, 2, 1, 1)
+        grid.addWidget(self.first_frame_button, 5, 0, 1, 1)
+        grid.addWidget(self.spin_box, 5, 1, 1, 2)
+        grid.addWidget(self.last_frame_button, 5, 3, 1, 1)
 
-        check_box.stateChanged.connect(lambda: self.set_selection(check_box.isChecked()))
-
+        scale_selected_check_box.stateChanged.connect(lambda: self.set_selection(scale_selected_check_box.isChecked()))
+        exponential_check_box.stateChanged.connect(lambda: self.on_exponential_check_box(exponential_check_box.isChecked()))
+        self.on_exponential_check_box(True)
         self.show()
+
+    def on_exponential_check_box(self, is_checked):
+        if is_checked:
+            self.spin_box.step_power = STEP_POWER
+        else:
+            self.spin_box.step_power = 1
+
+    def on_speed_change(self):
+        self.speed+=1
+        if self.speed>4:
+            self.speed=1
+        self.speed_button.setText("Speed: %s" %(self.speed))
+        self.set_step_based_on_speed()
+
+    def set_step_based_on_speed(self):
+        if self.speed == 1:
+            self.spin_box.setSingleStep(0.1)
+        if self.speed == 2:
+            self.spin_box.setSingleStep(0.5)
+        if self.speed == 3:
+            self.spin_box.setSingleStep(1.0)
+        if self.speed == 4:
+            self.spin_box.setSingleStep(10.0)
 
     def init_toggle_button(self, button):
         button.setCheckable(True)
         button.setDown(True)
         button.setChecked(True)
 
-    def init_spin_box(self, spine_box):
-        spine_box.setSingleStep(0.1)
-        spine_box.setMinimum(float("-inf"))
+    def init_spin_box(self, spin_box):
+        spin_box.setSingleStep(0.1)
+        spin_box.setMinimum(float("-inf"))
 
     def set_selection(self, is_selection):
         self.is_selection = is_selection
-        self.spine_box.is_selection = is_selection
+        self.spin_box.is_selection = is_selection
 
     def _toggle_button(self, pressed_button, unpressed_button):
         pressed_button.setDown(True)
@@ -98,19 +132,19 @@ class MainWindow(QWidget):
 
     def on_press_vertical(self):
         self._toggle_button(self.vertical_scale_button, self.horizontal_scale_button)
-        self.spine_box.is_vertical = True
+        self.spin_box.is_vertical = True
 
     def on_press_horizontal(self):
         self._toggle_button(self.horizontal_scale_button, self.vertical_scale_button)
-        self.spine_box.is_vertical = False
+        self.spin_box.is_vertical = False
 
     def on_press_first(self):
         self._toggle_button(self.first_frame_button, self.last_frame_button)
-        self.spine_box.is_first = True
+        self.spin_box.is_first = True
 
     def on_press_last(self):
         self._toggle_button(self.last_frame_button, self.first_frame_button)
-        self.spine_box.is_first = False
+        self.spin_box.is_first = False
 
     def add_toggle_buttons(self, selected_label, unselected_label):
         """
@@ -144,6 +178,7 @@ class CustomSpinBox(QLineEdit):
         self.min = None
         self.max = None
         self.step = 0.1
+        self.step_power = 1
         self.value_at_press = None
         self.pos_at_press = None
         self.on_value_change_function = on_value_change
@@ -178,6 +213,7 @@ class CustomSpinBox(QLineEdit):
             self.value_at_press = self.getValue()
             self.pos_at_press = event.pos()
             self.setCursor(QCursor(Qt.SizeHorCursor))
+            self.num_of_steps = 0
         else:
             super(CustomSpinBox, self).mousePressEvent(event)
             self.selectAll()
@@ -199,29 +235,23 @@ class CustomSpinBox(QLineEdit):
         if self.pos_at_press is None:
             return
 
-        steps_mult = self.getStepsMultiplier(event)
-
         delta = event.pos().x() - self.pos_at_press.x()
         delta /= 6  # Make movement less sensitive.
-        delta *= self.step * steps_mult
+        delta *= self.step
 
+        # setting the overall value to the specific power so that the scale happens exponentially
 
-        value = self.value_at_press + delta
+        if self.value_at_press + delta < 0:
+            steps_mult = -1
+        else:
+            steps_mult = 1
+
+        value = steps_mult*abs(self.value_at_press + delta) ** self.step_power
         if value == 0:
             value += self.step * steps_mult
         self.setValueText(value)
-
+        self.num_of_steps += 1
         super(CustomSpinBox, self).mouseMoveEvent(event)
-
-    def getStepsMultiplier(self, event):
-        steps_mult = 1
-
-        if event.modifiers() == Qt.CTRL:
-            steps_mult = 10
-        elif event.modifiers() == Qt.SHIFT:
-            steps_mult = 0.1
-
-        return steps_mult
 
     def setSingleStep(self, step):
         self.step = step
